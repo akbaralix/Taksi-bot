@@ -20,19 +20,26 @@ function formatAddress(address = {}, displayName = "") {
 
 async function getAddress(lat, lon) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=19&addressdetails=1`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "TaksiBot/1.0",
-      "Accept-Language": "uz",
-    },
-  });
 
-  if (!res.ok) {
-    throw new Error(`Geocoding failed with status ${res.status}`);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "TaksiBot/1.0",
+        "Accept-Language": "uz",
+      },
+    });
+
+    if (!res.ok) {
+      console.warn(`Geocoding warning: status ${res.status}`);
+      return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    }
+
+    const data = await res.json();
+    return formatAddress(data.address, data.display_name);
+  } catch (err) {
+    console.error("Geocoding fetch error:", err.message);
+    return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
   }
-
-  const data = await res.json();
-  return formatAddress(data.address, data.display_name);
 }
 
 export async function saveUserLocation(ctx) {

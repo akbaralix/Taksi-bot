@@ -105,7 +105,10 @@ export default async function driverHandler(ctx) {
       return;
     }
 
-    const sentCount = await sendNearestPendingOrdersToDriver(ctx.telegram, user);
+    const sentCount = await sendNearestPendingOrdersToDriver(
+      ctx.telegram,
+      user,
+    );
     if (sentCount > 0) {
       await ctx.reply(
         `📨 Sizga yaqin bo'lgan ${sentCount} ta kutilayotgan buyurtma yuborildi.`,
@@ -166,4 +169,47 @@ export async function showMyAccount(ctx) {
   } catch (error) {
     console.error("ShowAccount Error:", error);
   }
+}
+
+export async function startSubscriptionChecker(bot) {
+  // Har 1 daqiqada tekshirib turadi
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      // Obunasi tugagan (va hali o'chirilmagan) haydovchilarni topamiz
+      const expiredUsers = await User.find({
+        subscriptionUntil: { $lt: now, $ne: null },
+      });
+
+      for (const user of expiredUsers) {
+        user.balance = 0;
+        user.isOnline = false;
+        user.subscriptionUntil = null;
+        await user.save();
+
+        try {
+          await bot.telegram.sendMessage(
+            user.telegramId,
+            `⚠️ <b>Diqqat! Obuna muddati tugadi.</b>\n\n` +
+              `Sizning haydovchilik hisobingiz vaqti tugadi va balansingiz nolga tushirildi.\n\n` +
+              `Xizmatdan foydalanishni davom ettirish uchun hisobni qayta to'ldiring.`,
+            {
+              parse_mode: "HTML",
+              ...Markup.keyboard([
+                ["💳 Hisobni to'ldirish"],
+                ["⬅️ Asosiy menyu"],
+              ]).resize(),
+            },
+          );
+        } catch (err) {
+          console.error(
+            `Obuna tugashi xabarini yuborishda xato (ID: ${user.telegramId}):`,
+            err.message,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Subscription checker loop error:", error);
+    }
+  }, 60 * 1000); // 1 daqiqa interval
 }

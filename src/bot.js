@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import http from "http";
 import { Telegraf, Markup } from "telegraf";
 import connectDB from "./database/connect.js";
 import User from "./models/User.js";
@@ -10,6 +11,7 @@ import adminHandler from "./handlers/admin.handler.js";
 import driverHandler, {
   stopDriverWork,
   showMyAccount,
+  startSubscriptionChecker,
 } from "./handlers/driver.handler.js";
 import { getMainKeyboard } from "./keyboards/main.keyboard.js";
 import locationHandler, {
@@ -385,6 +387,17 @@ bot.action(/reject_(\d+)/, async (ctx) => {
 
 async function bootstrap() {
   await connectDB();
+  startSubscriptionChecker(bot);
+
+  // Render health check uchun oddiy server
+  const port = process.env.PORT || 3000;
+  http
+    .createServer((req, res) => {
+      res.writeHead(200);
+      res.end("Bot ishlayapti");
+    })
+    .listen(port, () => console.log(`Server portda eshitmoqda: ${port}`));
+
   await bot.launch();
   console.log("Bot 100% tayyor!");
 }
