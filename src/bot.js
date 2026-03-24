@@ -45,6 +45,50 @@ function formatTripTime(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+async function completeRideAndNotify(telegram, driverTelegramId, data) {
+  const order = await Order.findOne({
+    _id: data.orderId,
+    status: "accepted",
+  });
+
+  if (!order) {
+    return { ok: false, message: "Buyurtma topilmadi yoki allaqachon yakunlangan." };
+  }
+
+  const driver = await User.findOne({ telegramId: Number(driverTelegramId) });
+  if (!driver || String(order.driverId) !== String(driver._id)) {
+    return { ok: false, message: "Bu buyurtmani yakunlashga ruxsat yo'q." };
+  }
+
+  const distanceKm = Math.max(0, Number(data.distanceKm) || 0);
+  const durationSec = Math.max(0, Number(data.durationSec) || 0);
+  const price = Math.max(0, Number(data.price) || 0);
+
+  order.status = "completed";
+  order.tripDistanceKm = distanceKm;
+  order.tripDurationSec = durationSec;
+  order.tripPrice = price;
+  order.completedAt = new Date();
+  await order.save();
+
+  await safeSendMessage(
+    telegram,
+    order.userId,
+    `🚕 <b>Safar yakunlandi</b>\n\n` +
+      `📏 Masofa: <b>${distanceKm.toFixed(2)} km</b>\n` +
+      `⏱ Vaqt: <b>${formatTripTime(durationSec)}</b>\n` +
+      `💵 Narx: <b>${price.toLocaleString()} so'm</b>`,
+    { parse_mode: "HTML" },
+  );
+
+  return {
+    ok: true,
+    distanceKm,
+    durationSec,
+    price,
+  };
+}
+
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     await markUserActive(ctx.from);
@@ -334,43 +378,13 @@ bot.on("message", async (ctx, next) => {
       return ctx.reply("Web ilovadan noma'lum ma'lumot keldi.");
     }
 
-    const order = await Order.findOne({
-      _id: data.orderId,
-      status: "accepted",
-    });
-
-    if (!order) {
-      return ctx.reply("Buyurtma topilmadi yoki allaqachon yakunlangan.");
+    const result = await completeRideAndNotify(ctx.telegram, ctx.from.id, data);
+    if (!result.ok) {
+      return ctx.reply(result.message);
     }
-
-    const driver = await User.findOne({ telegramId: ctx.from.id });
-    if (!driver || String(order.driverId) !== String(driver._id)) {
-      return ctx.reply("Bu buyurtmani yakunlashga ruxsat yo'q.");
-    }
-
-    const distanceKm = Math.max(0, Number(data.distanceKm) || 0);
-    const durationSec = Math.max(0, Number(data.durationSec) || 0);
-    const price = Math.max(0, Number(data.price) || 0);
-
-    order.status = "completed";
-    order.tripDistanceKm = distanceKm;
-    order.tripDurationSec = durationSec;
-    order.tripPrice = price;
-    order.completedAt = new Date();
-    await order.save();
-
-    await safeSendMessage(
-      ctx.telegram,
-      order.userId,
-      `🚕 <b>Safar yakunlandi</b>\n\n` +
-        `📏 Masofa: <b>${distanceKm.toFixed(2)} km</b>\n` +
-        `⏱ Vaqt: <b>${formatTripTime(durationSec)}</b>\n` +
-        `💵 Narx: <b>${price.toLocaleString()} so'm</b>`,
-      { parse_mode: "HTML" },
-    );
 
     await ctx.reply(
-      `✅ Buyurtma yakunlandi.\n\n📏 ${distanceKm.toFixed(2)} km\n⏱ ${formatTripTime(durationSec)}\n💵 ${price.toLocaleString()} so'm`,
+      `✅ Buyurtma yakunlandi.\n\n📏 ${result.distanceKm.toFixed(2)} km\n⏱ ${formatTripTime(result.durationSec)}\n💵 ${result.price.toLocaleString()} so'm`,
     );
   } catch (error) {
     console.error("Web app data processing error:", error);
@@ -458,7 +472,64 @@ async function bootstrap() {
   // Render health check uchun oddiy server
   const port = process.env.PORT || 3000;
   http
-    .createServer((req, res) => {
+    .createServer(async (req, res) => {
+      if (req.method === "POST" && req.url === "/api/webapp/ride-complete") {
+        try {
+          let body = "";
+
+          req.on("data", (chunk) => {
+            body += chunk;
+          });
+
+          req.on("end", async () => {
+            try {
+              const data = JSON.parse(body || "{}");
+              const driverTelegramId = Number(data.driverTelegramId);
+              const result = await completeRideAndNotify(
+                bot.telegram,
+                driverTelegramId,
+                data,
+              );
+
+              res.writeHead(result.ok ? 200 : 400, {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type",
+              });
+              res.end(JSON.stringify(result));
+            } catch (error) {
+              console.error("Ride complete endpoint parse error:", error);
+              res.writeHead(500, {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type",
+              });
+              res.end(JSON.stringify({ ok: false, message: "Server xatoligi" }));
+            }
+          });
+          return;
+        } catch (error) {
+          console.error("Ride complete endpoint error:", error);
+          res.writeHead(500, {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type",
+          });
+          res.end(JSON.stringify({ ok: false, message: "Server xatoligi" }));
+          return;
+        }
+      }
+
+      if (req.method === "OPTIONS" && req.url === "/api/webapp/ride-complete") {
+        res.writeHead(204, {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        });
+        res.end();
+        return;
+      }
+
       res.writeHead(200);
       res.end("Bot ishlayapti");
     })

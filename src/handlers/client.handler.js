@@ -6,6 +6,7 @@ import { safeSendMessage } from "../services/telegram.service.js";
 
 const DRIVER_WEBAPP_URL =
   process.env.DRIVER_WEBAPP_URL || "https://ozimiznitaksi.netlify.app";
+const WEBAPP_API_URL = process.env.WEBAPP_API_URL || "";
 const MAX_NEAREST_DRIVERS = 5;
 const MAX_PENDING_ORDERS_FOR_DRIVER = 5;
 const DRIVER_ORDER_RADIUS_KM = 5;
@@ -32,11 +33,37 @@ function hasCoordinates(entity) {
   return Boolean(entity?.latitude && entity?.longitude);
 }
 
-function buildDriverWebAppUrl(orderId, driverTelegramId) {
+function buildDriverWebAppUrl(orderId, driverTelegramId, driverName, driverPhotoUrl) {
   const url = new URL(DRIVER_WEBAPP_URL);
   url.searchParams.set("orderId", String(orderId));
   url.searchParams.set("driverTelegramId", String(driverTelegramId));
+  if (driverName) {
+    url.searchParams.set("driverName", driverName);
+  }
+  if (driverPhotoUrl) {
+    url.searchParams.set("driverPhotoUrl", driverPhotoUrl);
+  }
+  if (WEBAPP_API_URL) {
+    url.searchParams.set("apiBase", WEBAPP_API_URL);
+  }
   return url.toString();
+}
+
+async function getTelegramProfilePhotoUrl(telegram, telegramId) {
+  try {
+    const photos = await telegram.getUserProfilePhotos(telegramId, 0, 1);
+    const fileId = photos?.photos?.[0]?.[0]?.file_id;
+
+    if (!fileId) {
+      return "";
+    }
+
+    const fileLink = await telegram.getFileLink(fileId);
+    return fileLink?.toString() || "";
+  } catch (error) {
+    console.error("Driver profile photo olishda xato:", error.message);
+    return "";
+  }
 }
 
 async function findNearestActiveDrivers(order) {
@@ -257,6 +284,11 @@ export default function myOrders(bot) {
         });
       }
 
+      const driverPhotoUrl = await getTelegramProfilePhotoUrl(
+        ctx.telegram,
+        driverTelegramId,
+      );
+
       const order = await Order.findOneAndUpdate(
         { _id: orderId, status: "pending" },
         { status: "accepted", driverId: driver._id, acceptedAt: new Date() },
@@ -285,7 +317,12 @@ export default function myOrders(bot) {
                 {
                   text: "📱 Ilovani ochish",
                   web_app: {
-                    url: buildDriverWebAppUrl(order._id, driverTelegramId),
+                    url: buildDriverWebAppUrl(
+                      order._id,
+                      driverTelegramId,
+                      driver.firstName,
+                      driverPhotoUrl,
+                    ),
                   },
                 },
               ],
