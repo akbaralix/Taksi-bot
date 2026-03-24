@@ -4,6 +4,8 @@ import taxiHandler from "../keyboards/client.keyboard.js";
 import { Markup } from "telegraf";
 import { safeSendMessage } from "../services/telegram.service.js";
 
+const DRIVER_WEBAPP_URL =
+  process.env.DRIVER_WEBAPP_URL || "https://ozimiznitaksi.netlify.app";
 const MAX_NEAREST_DRIVERS = 5;
 const MAX_PENDING_ORDERS_FOR_DRIVER = 5;
 const DRIVER_ORDER_RADIUS_KM = 5;
@@ -28,6 +30,13 @@ function calculateDistanceKm(from, to) {
 
 function hasCoordinates(entity) {
   return Boolean(entity?.latitude && entity?.longitude);
+}
+
+function buildDriverWebAppUrl(orderId, driverTelegramId) {
+  const url = new URL(DRIVER_WEBAPP_URL);
+  url.searchParams.set("orderId", String(orderId));
+  url.searchParams.set("driverTelegramId", String(driverTelegramId));
+  return url.toString();
 }
 
 async function findNearestActiveDrivers(order) {
@@ -81,9 +90,7 @@ async function notifyDriverAboutOrder(telegram, driver, order, distanceKm) {
     {
       parse_mode: "HTML",
       ...Markup.inlineKeyboard([
-        [
-          Markup.button.callback("🚕 Qabul qilish", `accept_order_${order._id}`),
-        ],
+        [Markup.button.callback("🚕 Qabul qilish", `accept_order_${order._id}`)],
       ]),
     },
   );
@@ -105,8 +112,7 @@ export async function sendNearestPendingOrdersToDriver(telegram, driver) {
     return 0;
   }
 
-  const now = new Date();
-  if (driver.subscriptionUntil <= now) {
+  if (driver.subscriptionUntil <= new Date()) {
     return 0;
   }
 
@@ -163,8 +169,7 @@ async function dispatchOrderToNearestDrivers(telegram, order) {
 export default function myOrders(bot) {
   bot.hears("🚕 Taxi chaqirish", async (ctx) => {
     try {
-      const telegramId = ctx.from.id;
-      await User.findOneAndUpdate({ telegramId }, { role: "client" });
+      await User.findOneAndUpdate({ telegramId: ctx.from.id }, { role: "client" });
       await taxiHandler(ctx);
     } catch (err) {
       console.error("Taxi chaqirishda xato:", err);
@@ -172,10 +177,8 @@ export default function myOrders(bot) {
   });
 
   bot.hears("ℹ️ Mening elonlarim", async (ctx) => {
-    const telegramId = ctx.from.id;
-
     try {
-      const orders = await Order.find({ userId: telegramId }).sort({
+      const orders = await Order.find({ userId: String(ctx.from.id) }).sort({
         createdAt: -1,
       });
 
@@ -189,18 +192,13 @@ export default function myOrders(bot) {
           `📍 <b>Manzil:</b> ${order.address}\n` +
           `📞 <b>Telefon:</b> +${order.phoneNumber}\n` +
           `👤 <b>Ism:</b> ${order.firstName}\n` +
-          `📌 <b>Status:</b> ${order.status}\n` +
+          `📊 <b>Status:</b> ${order.status}\n` +
           `📝 <b>Izoh:</b> ${order.note || "Yo'q"}`;
 
         await ctx.reply(message, {
           parse_mode: "HTML",
           ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                "❌ Bekor qilish",
-                `cancel_order_${order._id}`,
-              ),
-            ],
+            [Markup.button.callback("❌ Bekor qilish", `cancel_order_${order._id}`)],
           ]),
         });
       }
@@ -234,7 +232,6 @@ export default function myOrders(bot) {
       await ctx.editMessageText(
         "✅ Buyurtma qabul qilindi, tez orada siz bilan bog'laniladi.",
       );
-
       await ctx.answerCbQuery("Buyurtma qabul qilindi.");
     } catch (error) {
       console.error("Confirm error:", error);
@@ -262,7 +259,7 @@ export default function myOrders(bot) {
 
       const order = await Order.findOneAndUpdate(
         { _id: orderId, status: "pending" },
-        { status: "accepted", driverId: driver._id },
+        { status: "accepted", driverId: driver._id, acceptedAt: new Date() },
         { new: true },
       );
 
@@ -287,7 +284,9 @@ export default function myOrders(bot) {
               [
                 {
                   text: "📱 Ilovani ochish",
-                  web_app: { url: "https://ozimiznitaksi.netlify.app" },
+                  web_app: {
+                    url: buildDriverWebAppUrl(order._id, driverTelegramId),
+                  },
                 },
               ],
             ],

@@ -37,6 +37,14 @@ if (!process.env.BOT_TOKEN) {
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+function formatTripTime(totalSeconds) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     await markUserActive(ctx.from);
@@ -310,6 +318,64 @@ bot.on("photo", async (ctx) => {
   user.step = "menu";
   user.tempData = undefined;
   await user.save();
+});
+
+bot.on("message", async (ctx, next) => {
+  const payload = ctx.message?.web_app_data?.data;
+
+  if (!payload) {
+    return next();
+  }
+
+  try {
+    const data = JSON.parse(payload);
+
+    if (data?.type !== "ride_completed") {
+      return ctx.reply("Web ilovadan noma'lum ma'lumot keldi.");
+    }
+
+    const order = await Order.findOne({
+      _id: data.orderId,
+      status: "accepted",
+    });
+
+    if (!order) {
+      return ctx.reply("Buyurtma topilmadi yoki allaqachon yakunlangan.");
+    }
+
+    const driver = await User.findOne({ telegramId: ctx.from.id });
+    if (!driver || String(order.driverId) !== String(driver._id)) {
+      return ctx.reply("Bu buyurtmani yakunlashga ruxsat yo'q.");
+    }
+
+    const distanceKm = Math.max(0, Number(data.distanceKm) || 0);
+    const durationSec = Math.max(0, Number(data.durationSec) || 0);
+    const price = Math.max(0, Number(data.price) || 0);
+
+    order.status = "completed";
+    order.tripDistanceKm = distanceKm;
+    order.tripDurationSec = durationSec;
+    order.tripPrice = price;
+    order.completedAt = new Date();
+    await order.save();
+
+    await safeSendMessage(
+      ctx.telegram,
+      order.userId,
+      `🚕 <b>Safar yakunlandi</b>\n\n` +
+        `📏 Masofa: <b>${distanceKm.toFixed(2)} km</b>\n` +
+        `⏱ Vaqt: <b>${formatTripTime(durationSec)}</b>\n` +
+        `💵 Narx: <b>${price.toLocaleString()} so'm</b>`,
+      { parse_mode: "HTML" },
+    );
+
+    await ctx.reply(
+      `✅ Buyurtma yakunlandi.\n\n📏 ${distanceKm.toFixed(2)} km\n⏱ ${formatTripTime(durationSec)}\n💵 ${price.toLocaleString()} so'm`,
+    );
+  } catch (error) {
+    console.error("Web app data processing error:", error);
+    await ctx.reply("Web ilova ma'lumotini qayta ishlashda xatolik yuz berdi.");
+  }
 });
 
 bot.action(/approve_(\d+)_(\d+)/, async (ctx) => {

@@ -16,6 +16,11 @@ const orderSchema = new mongoose.Schema({
   driverId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   notifiedDrivers: [{ type: Number }],
   note: String,
+  tripDistanceKm: { type: Number, default: 0 },
+  tripDurationSec: { type: Number, default: 0 },
+  tripPrice: { type: Number, default: 0 },
+  acceptedAt: Date,
+  completedAt: Date,
   createdAt: { type: Date, default: Date.now },
 });
 
