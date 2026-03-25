@@ -17,12 +17,6 @@ export default function paymentKeyboard(ctx) {
         ],
         [Markup.button.callback("📅 1 HAFTA — 49 000 so'm", "tarif2")],
         [Markup.button.callback("☀️ 1 KUN — 9 000 so'm", "tarif3")],
-        [
-          Markup.button.url(
-            "👨‍💻 Admin bilan bog'lanish",
-            "https://t.me/akbaral1",
-          ),
-        ],
       ]),
     },
   );
