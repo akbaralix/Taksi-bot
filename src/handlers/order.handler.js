@@ -1,74 +1,69 @@
-import Order from "../models/Order.js";
 import User from "../models/User.js";
 import { Markup } from "telegraf";
 import driverHandler from "./driver.handler.js";
-import mainkeyboard from "../keyboards/main.keyboard.js";
+import { getMainKeyboard } from "../keyboards/main.keyboard.js";
+import {
+  buildOrderPreviewMessage,
+  createDraftOrder,
+} from "../services/order.service.js";
+import { BUTTONS } from "../config/text.js";
 
 export default function orderHandler(bot) {
   bot.on("text", async (ctx) => {
     const text = ctx.message.text;
     const telegramId = ctx.from.id;
 
-    if (text === "🚖 Haydovchi bo‘lish") return driverHandler(ctx);
-    if (text === "⬅️ Orqaga") {
+    if (text === BUTTONS.becomeDriver) {
+      return driverHandler(ctx);
+    }
+
+    if (text === BUTTONS.back) {
       await User.findOneAndUpdate({ telegramId }, { step: "menu" });
       return ctx.reply("Asosiy menyuga qaytdingiz.", {
-        reply_markup: mainkeyboard.mainKeyboard,
+        reply_markup: getMainKeyboard(ctx.from.id),
       });
     }
 
     const user = await User.findOne({ telegramId });
 
-    if (user && user.step === "waiting_description") {
-      if (text.startsWith("🚕") || text.startsWith("⬅️")) return;
+    if (user?.step !== "waiting_description") {
+      return;
+    }
 
-      try {
-        const order = await Order.create({
-          user: user._id,
-          userId: user.telegramId,
-          address: user.address,
-          latitude: user.location.latitude,
-          longitude: user.location.longitude,
-          phoneNumber: user.phoneNumber,
-          firstName: user.firstName,
-          note: text,
-          status: "draft",
-        });
+    if (text.startsWith("\uD83D\uDE95") || text.startsWith("\u2B05\uFE0F")) {
+      return;
+    }
 
-        const previewMessage = `
-📝 <b>Buyurtma ma'lumotlari:</b>
+    if (
+      !user.location?.latitude ||
+      !user.location?.longitude ||
+      !user.address
+    ) {
+      await User.findOneAndUpdate({ telegramId }, { step: "menu" });
+      return ctx.reply(
+        "\u274C Lokatsiya topilmadi. Iltimos, qaytadan joylashuvingizni yuboring.",
+        {
+          reply_markup: getMainKeyboard(ctx.from.id),
+        },
+      );
+    }
 
-📍 <b>Manzil:</b> ${order.address}
-📞 <b>Tel:</b> +${order.phoneNumber}
-👤 <b>Ism:</b> ${order.firstName}
-💬 <b>Izoh:</b> ${order.note}
+    try {
+      const order = await createDraftOrder(user, text);
 
-<i>Ma'lumotlar to'g'rimi?</i>`;
+      await ctx.reply(buildOrderPreviewMessage(order), {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("\u2705 Tasdiqlash", `confirm_order_${order._id}`)],
+          [Markup.button.callback("\u274C Bekor qilish", `cancel_order_${order._id}`)],
+        ]),
+      });
 
-        await ctx.reply(previewMessage, {
-          parse_mode: "HTML",
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                "✅ Tasdiqlash",
-                `confirm_order_${order._id}`,
-              ),
-            ],
-            [
-              Markup.button.callback(
-                "❌ Bekor qilish",
-                `cancel_order_${order._id}`,
-              ),
-            ],
-          ]),
-        });
-
-        user.step = "confirming";
-        await user.save();
-      } catch (err) {
-        console.error("Zakas previewda xato:", err);
-        await ctx.reply("❌ Xatolik yuz berdi.");
-      }
+      user.step = "confirming";
+      await user.save();
+    } catch (err) {
+      console.error("Zakas previewda xato:", err);
+      await ctx.reply("\u274C Xatolik yuz berdi.");
     }
   });
 }

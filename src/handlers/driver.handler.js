@@ -2,6 +2,8 @@ import User from "../models/User.js";
 import startHandler from "./start.handler.js";
 import { Markup } from "telegraf";
 import { sendNearestPendingOrdersToDriver } from "./client.handler.js";
+import getDriverKeyboard from "../keyboards/driver.keyboard.js";
+import { BUTTONS } from "../config/text.js";
 
 function formatTimeLeft(milliseconds) {
   if (milliseconds <= 0) return "0 minut";
@@ -34,7 +36,7 @@ async function checkAndGetDriver(telegramId, ctx = null) {
     if (ctx) {
       try {
         await ctx.reply(
-          "⚠️ Obuna muddati tugaganligi sababli hisobingiz nolga tushirildi.",
+          "\u26A0\uFE0F Obuna muddati tugaganligi sababli hisobingiz nolga tushirildi.",
         );
       } catch (err) {
         console.error("Xabar yuborishda xatolik:", err);
@@ -43,14 +45,6 @@ async function checkAndGetDriver(telegramId, ctx = null) {
   }
 
   return user;
-}
-
-function driverKeyboard() {
-  return Markup.keyboard([
-    ["📴 Ishni yakunlash", "👤 Hisobim"],
-    [Markup.button.locationRequest("📍 Lokatsiyani yangilash")],
-    ["⬅️ Orqaga"],
-  ]).resize();
 }
 
 export default async function driverHandler(ctx) {
@@ -65,16 +59,13 @@ export default async function driverHandler(ctx) {
 
     if (user.balance <= 0) {
       return ctx.reply(
-        `🚫🚕 <b>Haydovchi rejimi yopiq!</b>\n\n` +
-          `💳 <b>Balansingiz yetarli emas</b>\n\n` +
-          `💰 <b>Balans:</b> 0 so'm\n\n` +
-          `⚠️ <i>Haydovchi rejimini yoqish uchun hisobni to'ldiring.</i>`,
+        `\uD83D\uDEAB\uD83D\uDE95 <b>Haydovchi rejimi yopiq!</b>\n\n` +
+          `\uD83D\uDCB3 <b>Balansingiz yetarli emas</b>\n\n` +
+          `\uD83D\uDCB0 <b>Balans:</b> 0 so'm\n\n` +
+          `\u26A0\uFE0F <i>Haydovchi rejimini yoqish uchun hisobni to'ldiring.</i>`,
         {
           parse_mode: "HTML",
-          ...Markup.keyboard([
-            ["💳 Hisobni to'ldirish"],
-            ["⬅️ Orqaga"],
-          ]).resize(),
+          ...Markup.keyboard([[BUTTONS.topUp], [BUTTONS.back]]).resize(),
         },
       );
     }
@@ -88,19 +79,19 @@ export default async function driverHandler(ctx) {
       : 0;
 
     await ctx.reply(
-      `✅ <b>Siz endi haydovchi rejimidasiz!</b>\n\n` +
-        `📊 <b>Status:</b> 🟢 Onlayn\n` +
-        `🕒 <b>Obuna:</b> ${formatTimeLeft(timeLeftMs)} qoldi\n` +
-        `💰 <b>Balans:</b> ${user.balance.toLocaleString()} so'm`,
+      `\u2705 <b>Siz endi haydovchi rejimidasiz!</b>\n\n` +
+        `\uD83D\uDCCA <b>Status:</b> \uD83D\uDFE2 Onlayn\n` +
+        `\uD83D\uDD52 <b>Obuna:</b> ${formatTimeLeft(timeLeftMs)} qoldi\n` +
+        `\uD83D\uDCB0 <b>Balans:</b> ${user.balance.toLocaleString()} so'm`,
       {
         parse_mode: "HTML",
-        ...driverKeyboard(),
+        ...getDriverKeyboard(),
       },
     );
 
     if (!user.location?.latitude || !user.location?.longitude) {
       await ctx.reply(
-        "📍 Eng yaqin buyurtmalarni olish uchun joriy lokatsiyangizni yuboring.",
+        "\uD83D\uDCCD Eng yaqin buyurtmalarni olish uchun joriy lokatsiyangizni yuboring.",
       );
       return;
     }
@@ -111,7 +102,7 @@ export default async function driverHandler(ctx) {
     );
     if (sentCount > 0) {
       await ctx.reply(
-        `📨 Sizga yaqin bo'lgan ${sentCount} ta kutilayotgan buyurtma yuborildi.`,
+        `\uD83D\uDCE8 Sizga yaqin bo'lgan ${sentCount} ta kutilayotgan buyurtma yuborildi.`,
       );
     }
   } catch (err) {
@@ -128,11 +119,8 @@ export async function stopDriverWork(ctx) {
     );
 
     await ctx.reply(
-      "✅ Ishni yakunladingiz.\n\n📊 Status: 🔴 Oflayn",
-      Markup.keyboard([
-        ["🚕 Haydovchi rejimini yoqish"],
-        ["⬅️ Asosiy menyu"],
-      ]).resize(),
+      "\u2705 Ishni yakunladingiz.\n\n\uD83D\uDCCA Status: \uD83D\uDD34 Oflayn",
+      Markup.keyboard([[BUTTONS.enableDriverMode], [BUTTONS.mainMenu]]).resize(),
     );
   } catch (error) {
     console.error("StopDriver Error:", error);
@@ -145,24 +133,24 @@ export async function showMyAccount(ctx) {
     const balance = user?.balance || 0;
     const now = new Date();
 
-    let expiryText = "❌ Aktiv emas";
+    let expiryText = "\u274C Aktiv emas";
     if (user?.subscriptionUntil && user.subscriptionUntil > now) {
       expiryText = formatTimeLeft(user.subscriptionUntil - now);
     }
 
     await ctx.reply(
-      `👤 <b>Shaxsiy hisob:</b>\n\n` +
-        `🆔 <b>ID:</b> <code>${ctx.from.id}</code>\n` +
-        `💰 <b>Balans:</b> ${balance.toLocaleString()} so'm\n` +
-        `📅 <b>Obuna tugashiga:</b> ${expiryText} qoldi\n` +
-        `📊 <b>Status:</b> ${user?.isOnline ? "🟢 Onlayn" : "🔴 Oflayn"}\n\n` +
-        `<i>💡 Eslatma: Obuna tugashi bilan balans nolga tushadi.</i>`,
+      `\uD83D\uDC64 <b>Shaxsiy hisob:</b>\n\n` +
+        `\uD83C\uDD94 <b>ID:</b> <code>${ctx.from.id}</code>\n` +
+        `\uD83D\uDCB0 <b>Balans:</b> ${balance.toLocaleString()} so'm\n` +
+        `\uD83D\uDCC5 <b>Obuna tugashiga:</b> ${expiryText} qoldi\n` +
+        `\uD83D\uDCCA <b>Status:</b> ${user?.isOnline ? "\uD83D\uDFE2 Onlayn" : "\uD83D\uDD34 Oflayn"}\n\n` +
+        `<i>\uD83D\uDCA1 Eslatma: Obuna tugashi bilan balans nolga tushadi.</i>`,
       {
         parse_mode: "HTML",
         ...Markup.keyboard([
-          ["💳 Hisobni to'ldirish"],
-          [Markup.button.locationRequest("📍 Lokatsiyani yangilash")],
-          ["⬅️ Asosiy menyu"],
+          [BUTTONS.topUp],
+          [Markup.button.locationRequest(BUTTONS.refreshLocation)],
+          [BUTTONS.mainMenu],
         ]).resize(),
       },
     );
@@ -172,11 +160,9 @@ export async function showMyAccount(ctx) {
 }
 
 export async function startSubscriptionChecker(bot) {
-  // Har 1 daqiqada tekshirib turadi
   setInterval(async () => {
     try {
       const now = new Date();
-      // Obunasi tugagan (va hali o'chirilmagan) haydovchilarni topamiz
       const expiredUsers = await User.find({
         subscriptionUntil: { $lt: now, $ne: null },
       });
@@ -190,15 +176,12 @@ export async function startSubscriptionChecker(bot) {
         try {
           await bot.telegram.sendMessage(
             user.telegramId,
-            `⚠️ <b>Diqqat! Obuna muddati tugadi.</b>\n\n` +
+            `\u26A0\uFE0F <b>Diqqat! Obuna muddati tugadi.</b>\n\n` +
               `Sizning haydovchilik hisobingiz vaqti tugadi va balansingiz nolga tushirildi.\n\n` +
               `Xizmatdan foydalanishni davom ettirish uchun hisobni qayta to'ldiring.`,
             {
               parse_mode: "HTML",
-              ...Markup.keyboard([
-                ["💳 Hisobni to'ldirish"],
-                ["⬅️ Asosiy menyu"],
-              ]).resize(),
+              ...Markup.keyboard([[BUTTONS.topUp], [BUTTONS.mainMenu]]).resize(),
             },
           );
         } catch (err) {
@@ -211,5 +194,5 @@ export async function startSubscriptionChecker(bot) {
     } catch (error) {
       console.error("Subscription checker loop error:", error);
     }
-  }, 60 * 1000); // 1 daqiqa interval
+  }, 60 * 1000);
 }

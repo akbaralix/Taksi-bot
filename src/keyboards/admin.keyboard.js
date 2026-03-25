@@ -1,8 +1,10 @@
+import { BUTTONS } from "../config/text.js";
+
 const adminKeyboard = {
   keyboard: [
-    ["👥 Faol userlar", "🚕 Faol driverlar"],
-    ["🚫 Botni bloklaganlar", "📢 Xabar yuborish"],
-    ["⬅️ Asosiy menyu"],
+    [BUTTONS.activeUsers, BUTTONS.activeDrivers],
+    [BUTTONS.blockedUsers, BUTTONS.broadcast],
+    [BUTTONS.mainMenu],
   ],
   resize_keyboard: true,
 };

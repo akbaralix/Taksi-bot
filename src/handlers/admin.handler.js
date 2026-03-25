@@ -2,6 +2,7 @@ import { Markup } from "telegraf";
 import User from "../models/User.js";
 import adminKeyboard from "../keyboards/admin.keyboard.js";
 import { safeCopyMessage } from "../services/telegram.service.js";
+import { BUTTONS } from "../config/text.js";
 
 function isAdmin(ctx) {
   return String(ctx.from?.id) === String(process.env.ADMIN_ID);
@@ -22,37 +23,15 @@ async function showAdminMenu(ctx) {
     { upsert: true },
   );
 
-  return ctx.reply("🛠 <b>Admin panel</b>\n\nKerakli bo'limni tanlang.", {
+  return ctx.reply("\uD83D\uDEE0 <b>Admin panel</b>\n\nKerakli bo'limni tanlang.", {
     parse_mode: "HTML",
     reply_markup: adminKeyboard,
   });
 }
 
-async function showStats(ctx) {
-  const now = new Date();
-  const [activeUsers, blockedUsers, activeDrivers] = await Promise.all([
-    User.countDocuments({ isBlocked: { $ne: true } }),
-    User.countDocuments({ isBlocked: true }),
-    User.countDocuments({
-      role: "driver",
-      isOnline: true,
-      subscriptionUntil: { $gt: now },
-      isBlocked: { $ne: true },
-    }),
-  ]);
-
-  await ctx.reply(
-    `📊 <b>Bot statistikasi</b>\n\n` +
-      `👥 Faol userlar: <b>${activeUsers}</b>\n` +
-      `🚫 Botni bloklaganlar: <b>${blockedUsers}</b>\n` +
-      `🚕 Faol driverlar: <b>${activeDrivers}</b>`,
-    { parse_mode: "HTML", reply_markup: adminKeyboard },
-  );
-}
-
 async function showActiveUsers(ctx) {
   const activeUsers = await User.countDocuments({ isBlocked: { $ne: true } });
-  await ctx.reply(`👥 Faol userlar soni: <b>${activeUsers}</b>`, {
+  await ctx.reply(`\uD83D\uDC65 Faol userlar soni: <b>${activeUsers}</b>`, {
     parse_mode: "HTML",
     reply_markup: adminKeyboard,
   });
@@ -60,7 +39,7 @@ async function showActiveUsers(ctx) {
 
 async function showBlockedUsers(ctx) {
   const blockedUsers = await User.countDocuments({ isBlocked: true });
-  await ctx.reply(`🚫 Botni bloklagan userlar soni: <b>${blockedUsers}</b>`, {
+  await ctx.reply(`\uD83D\uDEAB Botni bloklagan userlar soni: <b>${blockedUsers}</b>`, {
     parse_mode: "HTML",
     reply_markup: adminKeyboard,
   });
@@ -74,18 +53,18 @@ async function showActiveDrivers(ctx) {
     isBlocked: { $ne: true },
   });
 
-  await ctx.reply(`🚕 Faol driverlar soni: <b>${activeDrivers}</b>`, {
+  await ctx.reply(`\uD83D\uDE95 Faol driverlar soni: <b>${activeDrivers}</b>`, {
     parse_mode: "HTML",
     reply_markup: adminKeyboard,
   });
 }
 
 async function askBroadcastTarget(ctx) {
-  await ctx.reply("📢 Kimlarga xabar yuborasiz?", {
+  await ctx.reply("\uD83D\uDCE3 Kimlarga xabar yuborasiz?", {
     ...Markup.inlineKeyboard([
-      [Markup.button.callback("🙋 Yo'lovchilarga", "broadcast_clients")],
-      [Markup.button.callback("🚕 Haydovchilarga", "broadcast_drivers")],
-      [Markup.button.callback("🌐 Hammaga", "broadcast_all")],
+      [Markup.button.callback("\uD83D\uDE4B Yo'lovchilarga", "broadcast_clients")],
+      [Markup.button.callback("\uD83D\uDE95 Haydovchilarga", "broadcast_drivers")],
+      [Markup.button.callback("\uD83C\uDF10 Hammaga", "broadcast_all")],
     ]),
   });
 }
@@ -99,7 +78,7 @@ async function setBroadcastMode(ctx, segment) {
 
   await ctx.answerCbQuery();
   await ctx.reply(
-    "✉️ Endi yuboriladigan xabarni jo'nating.\n\nText, sticker, photo, video yoki boshqa xabar turlari ham yuborishingiz mumkin.",
+    "\u2709\uFE0F Endi yuboriladigan xabarni jo'nating.\n\nText, sticker, photo, video yoki boshqa xabar turlari ham yuborishingiz mumkin.",
     { reply_markup: adminKeyboard },
   );
 }
@@ -160,9 +139,9 @@ async function handleBroadcastMessage(ctx) {
   await User.findOneAndUpdate({ telegramId: ctx.from.id }, { step: "menu" });
 
   await ctx.reply(
-    `✅ Xabar yuborish yakunlandi.\n\n` +
-      `📬 Yuborildi: ${sentCount}\n` +
-      `⚠️ Yuborilmadi: ${failedCount}`,
+    `\u2705 Xabar yuborish yakunlandi.\n\n` +
+      `\uD83D\uDCEC Yuborildi: ${sentCount}\n` +
+      `\u26A0\uFE0F Yuborilmadi: ${failedCount}`,
     { reply_markup: adminKeyboard },
   );
 
@@ -175,27 +154,27 @@ export default function adminHandler(bot) {
     await showAdminMenu(ctx);
   });
 
-  bot.hears("🛠 Admin panel", async (ctx) => {
+  bot.hears(BUTTONS.adminPanel, async (ctx) => {
     if (!adminOnly(ctx)) return;
     await showAdminMenu(ctx);
   });
 
-  bot.hears("👥 Faol userlar", async (ctx) => {
+  bot.hears(BUTTONS.activeUsers, async (ctx) => {
     if (!adminOnly(ctx)) return;
     await showActiveUsers(ctx);
   });
 
-  bot.hears("🚫 Botni bloklaganlar", async (ctx) => {
+  bot.hears(BUTTONS.blockedUsers, async (ctx) => {
     if (!adminOnly(ctx)) return;
     await showBlockedUsers(ctx);
   });
 
-  bot.hears("🚕 Faol driverlar", async (ctx) => {
+  bot.hears(BUTTONS.activeDrivers, async (ctx) => {
     if (!adminOnly(ctx)) return;
     await showActiveDrivers(ctx);
   });
 
-  bot.hears("📢 Xabar yuborish", async (ctx) => {
+  bot.hears(BUTTONS.broadcast, async (ctx) => {
     if (!adminOnly(ctx)) return;
     await askBroadcastTarget(ctx);
   });
